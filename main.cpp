@@ -22,6 +22,13 @@ constexpr float FUEL_CONSUMPTION_RATE = 12.0f;
 
 float gFuel = MAX_FUEL;
 Texture2D gFuelTexture;
+int gBuildingNum = -1;
+
+enum GameState { HOME, PLAYING, GAME_WON, GAME_LOST };
+GameState gGameState = PLAYING;
+Texture2D gBG;
+Texture2D gWinScreen;
+Texture2D gLoseScreen;
 
 struct BuildingConfig {
     const char* texture;
@@ -50,7 +57,7 @@ const BuildingConfig BUILDING_TEXTURES[] = {
 };
 
 constexpr int   NUMBER_OF_BUILDINGS     = sizeof(BUILDING_TEXTURES) / sizeof(BUILDING_TEXTURES[0]);;
-constexpr float ACCELERATION_OF_GRAVITY = 1.0f,
+constexpr float ACCELERATION_OF_GRAVITY = 5.0f,
                 FIXED_TIMESTEP          = 1.0f / 60.0f;
 
 // Global Variables
@@ -60,6 +67,9 @@ float     gPreviousTicks   = 0.0f,
 
 Entity *gHelicopter = nullptr;
 Entity *gBuildings = nullptr;
+float gFlashTimer = 0.0f;
+float gColorTimer = 0.0f;
+bool gFlashRed = false;
 
 // Function Declarations
 void initialise();
@@ -98,11 +108,6 @@ void initialise()
         animationAtlas                   // actual atlas
     );
 
-    // gProtag->setJumpingPower(400.0f);
-    // gProtag->setColliderDimensions({
-    //     gProtag->getScale().x / 3.0f,
-    //     gProtag->getScale().y / 3.0f
-    // });
     gHelicopter->setAcceleration({ 0.0f, ACCELERATION_OF_GRAVITY });
 
     /*
@@ -111,8 +116,6 @@ void initialise()
 
     gBuildings = new Entity[NUMBER_OF_BUILDINGS];
 
-    // // Compute the left-most x coordinate so that the entire row is centred
-    // float leftMostX = ORIGIN.x - (NUMBER_OF_TILES * TILE_DIMENSION) / 2.0f;
     float currentX = 0.0f;
     for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
         Vector2 dimensions = BUILDING_TEXTURES[i].size;
@@ -123,19 +126,14 @@ void initialise()
             currentX + dimensions.x / 2.0f,
             SCREEN_HEIGHT - dimensions.y / 2.0f + 5.0f
         });
+        gBuildings[i].setLandable(BUILDING_TEXTURES[i].landable);
         currentX += dimensions.x;
     }
 
-    // Allocate the tile for the horizontal collision
-    // gTiles[NUMBER_OF_TILES - 1].setTexture("assets/game/tile_0000.png");
-    // gTiles[NUMBER_OF_TILES - 1].setScale({ TILE_DIMENSION, TILE_DIMENSION });
-    // gTiles[NUMBER_OF_TILES - 1].setColliderDimensions({ TILE_DIMENSION, TILE_DIMENSION });
-    // gTiles[NUMBER_OF_TILES - 1].setPosition({
-    //     ORIGIN.y + TILE_DIMENSION,
-    //     ORIGIN.y - TILE_DIMENSION
-    // });
-
     gFuelTexture = LoadTexture("assets/game/fuel.png");
+    gBG = LoadTexture("assets/game/BG.png");
+    gWinScreen = LoadTexture("assets/game/win.png");
+    gLoseScreen = LoadTexture("assets/game/lose.png");
 
     SetTargetFPS(FPS);
 }
@@ -154,64 +152,136 @@ void processInput()
     //     gProtag->normaliseMovement();
 
     if (IsKeyPressed(KEY_Q) || WindowShouldClose()) gAppStatus = TERMINATED;
-    if (gFuel > 0.0f) {
-        if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
-            gHelicopter -> accelerateLeft();
-            gFuel -= FUEL_CONSUMPTION_RATE * GetFrameTime();
-        }
-        else if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) {
-            gHelicopter -> accelerateRight();
-            gFuel -= FUEL_CONSUMPTION_RATE * GetFrameTime();
-        }
-        else
+    if (gGameState == PLAYING) {
+        if (gFuel > 0.0f) {
+            if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
+                gHelicopter -> accelerateLeft();
+                gFuel -= FUEL_CONSUMPTION_RATE * GetFrameTime();
+            }
+            else if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) {
+                gHelicopter -> accelerateRight();
+                gFuel -= FUEL_CONSUMPTION_RATE * GetFrameTime();
+            }
+            else
+                gHelicopter -> stopAccelerating();
+        } else {
+            gFuel = 0.0f;
             gHelicopter -> stopAccelerating();
-    } else {
-        gFuel = 0.0f;
-        gHelicopter -> stopAccelerating();
+        }
     }
 
 }
 
 void update()
 {
-    float ticks     = static_cast<float>(GetTime());
-    float deltaTime = ticks - gPreviousTicks;
-    gPreviousTicks  = ticks;
+    if (gGameState == PLAYING) {
+        float ticks     = static_cast<float>(GetTime());
+        float deltaTime = ticks - gPreviousTicks;
+        gPreviousTicks  = ticks;
+        if (gBuildingNum == -1) {
+            do {
+            gBuildingNum = GetRandomValue(0, NUMBER_OF_BUILDINGS - 1);
+            } while (!gBuildings[gBuildingNum].isLandable());
+        }
 
-    deltaTime += gTimeAccumulator; // fold in any leftover from last frame
+        deltaTime += gTimeAccumulator; // fold in any leftover from last frame
 
-    if (deltaTime < FIXED_TIMESTEP) // not enough time for a full step yet
-    {
-        gTimeAccumulator = deltaTime;
-        return;
+        if (deltaTime < FIXED_TIMESTEP) // not enough time for a full step yet
+        {
+            gTimeAccumulator = deltaTime;
+            return;
+        }
+
+        while (deltaTime >= FIXED_TIMESTEP) // consume as many full steps as possible
+        {
+        //     /*
+        //     Note here that we're only checking collisions from the PLAYER'S point
+        //     of view. This is, in general, the best practice.
+        //     */
+            gHelicopter ->update(FIXED_TIMESTEP, gBuildings, NUMBER_OF_BUILDINGS);
+
+            if (gFlashTimer < 3.0f) {
+                gFlashTimer += FIXED_TIMESTEP;
+                gColorTimer += FIXED_TIMESTEP;
+
+                if (gColorTimer >= 0.25f) {
+                    gColorTimer = 0.0f;
+                    gFlashRed = !gFlashRed;
+                }
+            }
+
+            for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
+                if (gHelicopter -> isCollidingX(&gBuildings[i]) && gHelicopter -> isCollidingY(&gBuildings[i])) {
+                    if (i == gBuildingNum && gHelicopter -> isCollidingBottom(&gBuildings[i])) gGameState = GAME_WON;
+                    else gGameState = GAME_LOST;
+                }
+                // if (gHelicopter -> isColliding(&gBuildings[i])) {
+                //     if (i == gBuildingNum) {
+                //         if (gHelicopter->isCollidingBottom())
+                //             gGameState = GAME_WON;
+                //         else
+                //             gGameState = GAME_LOST;
+                //     } else
+                //         gGameState = GAME_LOST;
+                // // gBuildings[i].update(FIXED_TIMESTEP, nullptr, 0);
+                // }
+            }
+
+            deltaTime -= FIXED_TIMESTEP;
+        }
+
+        gTimeAccumulator = deltaTime; // save the remainder for next frame
     }
-
-    while (deltaTime >= FIXED_TIMESTEP) // consume as many full steps as possible
-    {
-    //     /*
-    //     Note here that we're only checking collisions from the PLAYER'S point
-    //     of view. This is, in general, the best practice.
-    //     */
-    //     gProtag->update(FIXED_TIMESTEP, gTiles, NUMBER_OF_TILES);
-        gHelicopter ->update(FIXED_TIMESTEP, gBuildings, NUMBER_OF_BUILDINGS);
-
-        for (int i = 0; i < NUMBER_OF_BUILDINGS; i++)
-            gBuildings[i].update(FIXED_TIMESTEP, nullptr, 0);
-
-        deltaTime -= FIXED_TIMESTEP;
-    }
-
-    gTimeAccumulator = deltaTime; // save the remainder for next frame
 }
 
 void render()
 {
     BeginDrawing();
     ClearBackground(ColorFromHex(BG_COLOUR));
+    Rectangle background = {
+        0.0f,
+        0.0f,
+        (float)gBG.width,
+        (float)gBG.height
+    };
+
+    Rectangle backgroundDestination = {
+        0.0f,
+        0.0f,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT
+    };
+
+    DrawTexturePro(gBG, background, backgroundDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+
+    Rectangle gameOver = {
+        0.0f,
+        0.0f,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT
+    };
+
+    Rectangle gameOverDestination = {
+        0.0f,
+        0.0f,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT
+    };
+
+    if (gGameState == GAME_LOST) {
+        DrawTexturePro(gLoseScreen, gameOver, gameOverDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+    }
+    if (gGameState == GAME_WON) {
+        DrawTexturePro(gWinScreen, gameOver, gameOverDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+    }
 
     gHelicopter -> render();
 
-    for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) gBuildings[i].render();
+    for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
+        gBuildings[i].render();
+        if (i == gBuildingNum && gFlashTimer < 3.0f)
+            gBuildings[i].displayCollider(gFlashRed ? RED : WHITE);
+    }
 
     // Fuel bar
     float barX = 30.0f;
@@ -248,6 +318,9 @@ void shutdown()
     delete gHelicopter;
     delete[] gBuildings;
     UnloadTexture(gFuelTexture);
+    UnloadTexture(gBG);
+    UnloadTexture(gWinScreen);
+    UnloadTexture(gLoseScreen);
     CloseWindow();
 }
 

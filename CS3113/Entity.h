@@ -29,28 +29,22 @@ private:
     int   mCurrentFrameIndex = 0;
     float mAnimationTime     = 0.0f;
 
-    bool  mIsJumping    = false;
-    float mJumpingPower = 0.0f;
+    bool  mLandable    = false;
 
     int   mSpeed;
     float mAngle;
 
-    bool mIsCollidingTop    = false;
     bool mIsCollidingBottom = false;
-    bool mIsCollidingRight  = false;
-    bool mIsCollidingLeft   = false;
+    bool mIsCollidingSides  = false;
 
     EntityStatus mEntityStatus = ACTIVE;
 
-    bool isColliding(Entity *other) const;
     void checkCollisionY(Entity *collidableEntities, int collisionCheckCount);
     void checkCollisionX(Entity *collidableEntities, int collisionCheckCount);
     void resetColliderFlags()
     {
-        mIsCollidingTop    = false;
         mIsCollidingBottom = false;
-        mIsCollidingRight  = false;
-        mIsCollidingLeft   = false;
+        mIsCollidingSides  = false;
     }
 
     void animate(float deltaTime);
@@ -83,14 +77,13 @@ public:
 
     bool isActive() { return mEntityStatus == ACTIVE; }
 
-    // void moveUp()    { mMovement.y = -1; mDirection = UP;    }
-    // void moveDown()  { mMovement.y =  1; mDirection = DOWN;  }
-    // void moveLeft()  { mMovement.x = -1; mDirection = LEFT;  }
-    // void moveRight() { mMovement.x =  1; mDirection = RIGHT; }
-
     void accelerateLeft() { mAcceleration.x = -50.0f; }
     void accelerateRight() { mAcceleration.x = 50.0f; }
     void stopAccelerating() { mAcceleration.x = 0.0f; }
+    bool isCollidingBottom(Entity *other) const;
+    bool isCollidingX(Entity*) const;
+    bool isCollidingY(Entity*) const;
+
 
     // void resetMovement() { mMovement = { 0.0f, 0.0f }; }
 
@@ -105,15 +98,14 @@ public:
     TextureType getTextureType()           const { return mTextureType;           }
     Direction   getDirection()             const { return mDirection;             }
     int         getFrameSpeed()            const { return mFrameSpeed;            }
-    float       getJumpingPower()          const { return mJumpingPower;          }
-    bool        isJumping()                const { return mIsJumping;             }
     int         getSpeed()                 const { return mSpeed;                 }
     float       getAngle()                 const { return mAngle;                 }
 
-    bool isCollidingTop()    const { return mIsCollidingTop;    }
     bool isCollidingBottom() const { return mIsCollidingBottom; }
+    bool isLandable() const { return mLandable; }
 
     std::vector<int> getAnimationAtlas() const { return mAnimationAtlas; }
+    void displayCollider(Color);
 
     void setPosition(Vector2 newPosition)
         { mPosition = newPosition;                 }
@@ -133,10 +125,9 @@ public:
         { mSpeed = newSpeed;                       }
     void setFrameSpeed(int newSpeed)
         { mFrameSpeed = newSpeed;                  }
-    void setJumpingPower(float newJumpingPower)
-        { mJumpingPower = newJumpingPower;         }
     void setAngle(float newAngle)
         { mAngle = newAngle;                       }
+    void setLandable(bool landable) { mLandable = landable; }
 };
 
 #endif // ENTITY_H
