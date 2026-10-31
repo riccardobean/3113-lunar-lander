@@ -38,129 +38,6 @@ Entity::Entity(
 
 Entity::~Entity() { UnloadTexture(mTexture); }
 
-/**
- * Iterates through a list of collidable entities, checks for collisions with
- * the player entity, and resolves any vertical overlap by adjusting the
- * player's position and velocity accordingly.
- *
- * @param collidableEntities An array of pointers to `Entity` objects that
- * represent the entities that the current `Entity` instance can potentially
- * collide with. The `collisionCheckCount` parameter specifies the number of
- * entities in the `collidableEntities` array that need to be checked for
- * collision.
- * @param collisionCheckCount The number of entities that the current entity
- * (`Entity`) should check for collisions with. This parameter specifies how
- * many entities are in the `collidableEntities` array that need to be checked
- * for collisions with the current entity.
- */
-// void Entity::checkCollisionY(
-//     Entity *collidableEntities, int collisionCheckCount
-// )
-// {
-//     for (int i = 0; i < collisionCheckCount; i++)
-//     {
-//         // STEP 1: For every entity that our player can collide with...
-//         Entity *collidableEntity = &collidableEntities[i];
-
-//         if (isColliding(collidableEntity))
-//         {
-//             // STEP 2: Calculate the distance between its centre and our centre
-//             //         and use that to calculate the amount of overlap between
-//             //         both bodies.
-//             float yDistance = fabs(mPosition.y - collidableEntity->mPosition.y);
-//             float yOverlap  = fabs(
-//                 yDistance - (mColliderDimensions.y / 2.0f) -
-//                 (collidableEntity->mColliderDimensions.y / 2.0f)
-//             );
-
-//             // STEP 3: "Unclip" ourselves from the other entity, and zero our
-//             //         vertical velocity.
-//             // if (mVelocity.y > 0)
-//             // {
-//                 // mPosition.y        -= yOverlap;
-//                 mVelocity.y         = 0;
-//                 mIsCollidingBottom  = true;
-//             // }
-//             // else if (mVelocity.y < 0)
-//             // {
-//                 mPosition.y     += yOverlap;
-//                 // mVelocity.y      = 0;
-//             // }
-//         }
-//     }
-// }
-
-// void Entity::checkCollisionX(
-//     Entity *collidableEntities, int collisionCheckCount
-// )
-// {
-//     for (int i = 0; i < collisionCheckCount; i++)
-//     {
-//         Entity *collidableEntity = &collidableEntities[i];
-
-//         if (isColliding(collidableEntity))
-//         {
-//             // When standing on a platform, we're always slightly overlapping
-//             // it vertically due to gravity, which causes false horizontal
-//             // collision detections. So the solution I found is only resolve X
-//             // collisions if there's significant Y overlap, preventing the
-//             // platform we're standing on from acting like a wall.
-//             float yDistance = fabs(mPosition.y - collidableEntity->mPosition.y);
-//             float yOverlap  = fabs(
-//                 yDistance - (mColliderDimensions.y / 2.0f) -
-//                 (collidableEntity->mColliderDimensions.y / 2.0f)
-//             );
-
-//             // Skip if barely touching vertically (standing on platform)
-//             if (yOverlap < Y_COLLISION_THRESHOLD) continue;
-
-//             float xDistance = fabs(mPosition.x - collidableEntity->mPosition.x);
-//             float xOverlap  = fabs(
-//                 xDistance - (mColliderDimensions.x / 2.0f) -
-//                 (collidableEntity->mColliderDimensions.x / 2.0f)
-//             );
-
-//             if (mVelocity.x > 0)
-//             {
-//                 mPosition.x -= xOverlap;
-//                 mVelocity.x  = 0;
-
-//                 // Collision!
-//                 // mIsCollidingRight = true;
-//             }
-//             else if (mVelocity.x < 0)
-//             {
-//                 mPosition.x += xOverlap;
-//                 mVelocity.x  = 0;
-
-//                 // Collision!
-//                 // mIsCollidingLeft = true;
-//             }
-//         }
-//     }
-// }
-
-/**
- * Checks if two entities are colliding based on their positions and collider
- * dimensions.
- *
- * @param other represents another Entity with which you want to check for
- * collision. It is a pointer to the Entity class.
- *
- * @return returns `true` if the two entities are colliding based on their
- * positions and collider dimensions, and `false` otherwise.
- */
-// bool Entity::isColliding(Entity *other)
-// {
-//     float xDistance = fabs(mPosition.x - other->getPosition().x) -
-//         ((mColliderDimensions.x + other->getColliderDimensions().x) / 2.0f);
-//     float yDistance = fabs(mPosition.y - other->getPosition().y) -
-//         ((mColliderDimensions.y + other->getColliderDimensions().y) / 2.0f);
-//     if (yDistance < 0.0f)
-//         mIsCollidingBottom = true;
-
-//     return xDistance < -1.0f && yDistance < 0.0f;
-// }
 
 bool Entity::isCollidingX(Entity *other) const {
     float xDistance = fabs(mPosition.x - other->getPosition().x) -
@@ -189,8 +66,6 @@ bool Entity::isCollidingBottom(Entity* other) const {
  */
 void Entity::animate(float deltaTime)
 {
-    // mAnimationIndices = mAnimationAtlas.at(mDirection);
-
     mAnimationTime += deltaTime;
     float secondsPerFrame = 1.0f / mFrameSpeed;
 
@@ -216,6 +91,10 @@ void Entity::update(
 
     mPosition.y += mVelocity.y * deltaTime;
     mPosition.x += mVelocity.x * deltaTime;
+
+    mPosition.x += mMovement.x * mSpeed * deltaTime;
+    mPosition.y += mMovement.y * mSpeed * deltaTime;
+
     if (mTextureType == ATLAS)
         animate(deltaTime);
 }

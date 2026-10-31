@@ -25,10 +25,8 @@ Texture2D gFuelTexture;
 int gBuildingNum = -1;
 
 enum GameState { HOME, PLAYING, GAME_WON, GAME_LOST };
-GameState gGameState = PLAYING;
-Texture2D gBG;
-Texture2D gWinScreen;
-Texture2D gLoseScreen;
+GameState gGameState = HOME;
+
 
 struct BuildingConfig {
     const char* texture;
@@ -53,12 +51,13 @@ const BuildingConfig BUILDING_TEXTURES[] = {
     {"assets/game/building15.png", {103.0f, 308.0f}, true},
     {"assets/game/building4.png", {70.0f, 340.0f}, false},
     {"assets/game/building2.png", {90.0f, 382.5f}, false},
-    {"assets/game/building1.png", {80.0f, 320.0f}, true},
+    {"assets/game/building1.png", {80.0f, 320.0f}, false},
 };
 
-constexpr int   NUMBER_OF_BUILDINGS     = sizeof(BUILDING_TEXTURES) / sizeof(BUILDING_TEXTURES[0]);;
+constexpr int   NUMBER_OF_BUILDINGS     = sizeof(BUILDING_TEXTURES) / sizeof(BUILDING_TEXTURES[0]);
 constexpr float ACCELERATION_OF_GRAVITY = 5.0f,
                 FIXED_TIMESTEP          = 1.0f / 60.0f;
+constexpr Vector2 HELICOPTER_START = {ORIGIN.x, ORIGIN.y - 300.0f};
 
 // Global Variables
 AppStatus gAppStatus       = RUNNING;
@@ -67,9 +66,13 @@ float     gPreviousTicks   = 0.0f,
 
 Entity *gHelicopter = nullptr;
 Entity *gBuildings = nullptr;
-float gFlashTimer = 0.0f;
+Entity *gPlane = nullptr;
 float gColorTimer = 0.0f;
 bool gFlashRed = false;
+Texture2D gBG;
+Texture2D gWelcomeScreen;
+Texture2D gWinScreen;
+Texture2D gLoseScreen;
 
 // Function Declarations
 void initialise();
@@ -90,6 +93,21 @@ int getFuelFrame() {
     return 4;
 }
 
+void resetGame() {
+    gHelicopter -> setPosition(HELICOPTER_START);
+    gHelicopter->setAcceleration({ 0.0f, ACCELERATION_OF_GRAVITY });
+    gHelicopter->resetVelocity();
+    float planey = GetRandomValue(ORIGIN.y - 250, ORIGIN.y - 100);
+    gPlane -> setPosition({-50, planey});
+    gPlane->setSpeed(150);
+    gPlane->setMovement({1.0f, 0.0f});
+    gFuel = MAX_FUEL;
+    do {
+        gBuildingNum = GetRandomValue(0, NUMBER_OF_BUILDINGS - 1);
+    } while (!gBuildings[gBuildingNum].isLandable());
+    gGameState = PLAYING;
+}
+
 void initialise()
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Lunar Lander");
@@ -100,7 +118,7 @@ void initialise()
     std::vector<int> animationAtlas = { 0,  1,  2,  3,  4,  5,  6, 7 };
 
     gHelicopter = new Entity(
-        { ORIGIN.x, ORIGIN.y - 200.0f }, // position
+        HELICOPTER_START, // position
         { 72.0f, 24.0f },    // scale
         "assets/game/helicopter.png",    // texture file address
         ATLAS,                           // single image or atlas?
@@ -108,7 +126,6 @@ void initialise()
         animationAtlas                   // actual atlas
     );
 
-    gHelicopter->setAcceleration({ 0.0f, ACCELERATION_OF_GRAVITY });
 
     /*
         ----------- BUILDINGS -----------
@@ -130,28 +147,37 @@ void initialise()
         currentX += dimensions.x;
     }
 
+    /*
+        ----------- PLANE/ENEMY -----------
+    */
+
+    float planey = GetRandomValue(ORIGIN.y - 250, ORIGIN.y - 100);
+    gPlane = new Entity(
+        { -200, planey}, 
+        { 50.0f, 33.0f },    
+        "assets/game/plane1.png"   
+    );
+
+
     gFuelTexture = LoadTexture("assets/game/fuel.png");
     gBG = LoadTexture("assets/game/BG.png");
+    gWelcomeScreen = LoadTexture("assets/game/welcome.png");
     gWinScreen = LoadTexture("assets/game/win.png");
     gLoseScreen = LoadTexture("assets/game/lose.png");
+
 
     SetTargetFPS(FPS);
 }
 
 void processInput()
 {
-    // gProtag->resetMovement();
-
-    // if      (IsKeyDown(KEY_A)) gProtag->moveLeft();
-    // else if (IsKeyDown(KEY_D)) gProtag->moveRight();
-
-    // if (IsKeyPressed(KEY_W) && gProtag->isCollidingBottom()) gProtag->jump();
-
-    // to avoid faster diagonal speed
-    // if (GetLength(gProtag->getMovement()) > 1.0f)
-    //     gProtag->normaliseMovement();
 
     if (IsKeyPressed(KEY_Q) || WindowShouldClose()) gAppStatus = TERMINATED;
+    if (gGameState == HOME && IsKeyPressed(KEY_SPACE)) resetGame();
+    if (gGameState == GAME_LOST || gGameState == GAME_WON) {
+        if (IsKeyPressed(KEY_R)) resetGame();
+        if (IsKeyPressed(KEY_M)) gGameState = HOME;
+    }
     if (gGameState == PLAYING) {
         if (gFuel > 0.0f) {
             if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
@@ -174,15 +200,11 @@ void processInput()
 
 void update()
 {
+    
+    float ticks     = static_cast<float>(GetTime());
+    float deltaTime = ticks - gPreviousTicks;
+    gPreviousTicks  = ticks;
     if (gGameState == PLAYING) {
-        float ticks     = static_cast<float>(GetTime());
-        float deltaTime = ticks - gPreviousTicks;
-        gPreviousTicks  = ticks;
-        if (gBuildingNum == -1) {
-            do {
-            gBuildingNum = GetRandomValue(0, NUMBER_OF_BUILDINGS - 1);
-            } while (!gBuildings[gBuildingNum].isLandable());
-        }
 
         deltaTime += gTimeAccumulator; // fold in any leftover from last frame
 
@@ -194,42 +216,38 @@ void update()
 
         while (deltaTime >= FIXED_TIMESTEP) // consume as many full steps as possible
         {
-        //     /*
-        //     Note here that we're only checking collisions from the PLAYER'S point
-        //     of view. This is, in general, the best practice.
-        //     */
             gHelicopter ->update(FIXED_TIMESTEP, gBuildings, NUMBER_OF_BUILDINGS);
 
-            if (gFlashTimer < 3.0f) {
-                gFlashTimer += FIXED_TIMESTEP;
-                gColorTimer += FIXED_TIMESTEP;
+            Vector2 position = gHelicopter->getPosition();
+            Vector2 dimensions = gHelicopter->getColliderDimensions();
 
-                if (gColorTimer >= 0.25f) {
-                    gColorTimer = 0.0f;
-                    gFlashRed = !gFlashRed;
-                }
+            // Left edge of the screen
+            if (position.x - dimensions.x / 2.0f < 0.0f)
+                gGameState = GAME_LOST;
+
+            // Right edge of the screen
+            if (position.x + dimensions.x / 2.0f > SCREEN_WIDTH)
+                gGameState = GAME_LOST;
+            gPlane -> update(FIXED_TIMESTEP, gBuildings, NUMBER_OF_BUILDINGS);
+
+            if (gHelicopter->isCollidingX(gPlane) && gHelicopter->isCollidingY(gPlane)) gGameState = GAME_LOST;
+
+            gColorTimer += FIXED_TIMESTEP;
+
+            if (gColorTimer >= 0.25f) {
+                gColorTimer = 0.0f;
+                gFlashRed = !gFlashRed;
             }
+
 
             for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
                 if (gHelicopter -> isCollidingX(&gBuildings[i]) && gHelicopter -> isCollidingY(&gBuildings[i])) {
                     if (i == gBuildingNum && gHelicopter -> isCollidingBottom(&gBuildings[i])) gGameState = GAME_WON;
                     else gGameState = GAME_LOST;
                 }
-                // if (gHelicopter -> isColliding(&gBuildings[i])) {
-                //     if (i == gBuildingNum) {
-                //         if (gHelicopter->isCollidingBottom())
-                //             gGameState = GAME_WON;
-                //         else
-                //             gGameState = GAME_LOST;
-                //     } else
-                //         gGameState = GAME_LOST;
-                // // gBuildings[i].update(FIXED_TIMESTEP, nullptr, 0);
-                // }
             }
-
             deltaTime -= FIXED_TIMESTEP;
         }
-
         gTimeAccumulator = deltaTime; // save the remainder for next frame
     }
 }
@@ -254,14 +272,14 @@ void render()
 
     DrawTexturePro(gBG, background, backgroundDestination, {0.0f, 0.0f}, 0.0f, WHITE);
 
-    Rectangle gameOver = {
+    Rectangle screenSource = {
         0.0f,
         0.0f,
         SCREEN_WIDTH,
         SCREEN_HEIGHT
     };
 
-    Rectangle gameOverDestination = {
+    Rectangle screenDestination = {
         0.0f,
         0.0f,
         SCREEN_WIDTH,
@@ -269,45 +287,47 @@ void render()
     };
 
     if (gGameState == GAME_LOST) {
-        DrawTexturePro(gLoseScreen, gameOver, gameOverDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+        DrawTexturePro(gLoseScreen, screenSource, screenDestination, {0.0f, 0.0f}, 0.0f, WHITE);
     }
-    if (gGameState == GAME_WON) {
-        DrawTexturePro(gWinScreen, gameOver, gameOverDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+    else if (gGameState == GAME_WON) {
+        DrawTexturePro(gWinScreen, screenSource, screenDestination, {0.0f, 0.0f}, 0.0f, WHITE);
     }
-
-    gHelicopter -> render();
-
-    for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
-        gBuildings[i].render();
-        if (i == gBuildingNum && gFlashTimer < 3.0f)
-            gBuildings[i].displayCollider(gFlashRed ? RED : WHITE);
+    else if (gGameState == HOME) {
+        DrawTexturePro(gWelcomeScreen, screenSource, screenDestination, {0.0f, 0.0f}, 0.0f, WHITE);
     }
+    else {
+        gHelicopter -> render();
 
-    // Fuel bar
-    float barX = 30.0f;
-    float barY = 30.0f;
-    float barWidth = 250.0f;
-    float barHeight = 24.0f;
+        for (int i = 0; i < NUMBER_OF_BUILDINGS; i++) {
+            gBuildings[i].render();
+            if (i == gBuildingNum)
+                gBuildings[i].displayCollider(gFlashRed ? RED : WHITE);
+        }
 
-    float fuelRatio = gFuel / MAX_FUEL;
+        gPlane -> render();
 
-    int fuel = getFuelFrame();
+        // Fuel bar
 
-    Rectangle source = {
-        fuel * 64.0f,
-        0.0f,
-        64.0f,
-        16.0f
-    };
+        float fuelRatio = gFuel / MAX_FUEL;
 
-    Rectangle destination = {
-        30.0f,
-        30.0f,
-        192.0f,
-        48.0f
-    };
+        int fuel = getFuelFrame();
 
-    DrawTexturePro(gFuelTexture, source, destination, {0.0f, 0.0f}, 0.0f, WHITE);
+        Rectangle fuelSource = {
+            fuel * 64.0f,
+            0.0f,
+            64.0f,
+            16.0f
+        };
+
+        Rectangle fuelDestination = {
+            30.0f,
+            30.0f,
+            192.0f,
+            48.0f
+        };
+
+        DrawTexturePro(gFuelTexture, fuelSource, fuelDestination, {0.0f, 0.0f}, 0.0f, WHITE);
+    }
 
     EndDrawing();
 }
@@ -317,10 +337,12 @@ void shutdown()
     // Unload the textures while the window (GL context) still exists
     delete gHelicopter;
     delete[] gBuildings;
+    delete gPlane;
     UnloadTexture(gFuelTexture);
     UnloadTexture(gBG);
     UnloadTexture(gWinScreen);
     UnloadTexture(gLoseScreen);
+    UnloadTexture(gWelcomeScreen);
     CloseWindow();
 }
 

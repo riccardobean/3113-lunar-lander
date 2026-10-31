@@ -53,7 +53,6 @@ public:
     static constexpr int   DEFAULT_SIZE          = 250;
     static constexpr int   DEFAULT_SPEED         = 200;
     static constexpr int   DEFAULT_FRAME_SPEED   = 14;
-    static constexpr float Y_COLLISION_THRESHOLD = 0.5f;
 
     Entity();
     Entity(Vector2 position, Vector2 scale, const char *textureFilepath);
@@ -69,13 +68,6 @@ public:
 
     void update(float deltaTime, Entity *collidableEntities, int collisionCheckCount);
     void render();
-    void normaliseMovement() { Normalise(&mMovement); }
-
-    // void jump()       { mIsJumping = true;         }
-    void activate()   { mEntityStatus = ACTIVE;    }
-    void deactivate() { mEntityStatus = INACTIVE;  }
-
-    bool isActive() { return mEntityStatus == ACTIVE; }
 
     void accelerateLeft() { mAcceleration.x = -50.0f; }
     void accelerateRight() { mAcceleration.x = 50.0f; }
@@ -83,9 +75,6 @@ public:
     bool isCollidingBottom(Entity *other) const;
     bool isCollidingX(Entity*) const;
     bool isCollidingY(Entity*) const;
-
-
-    // void resetMovement() { mMovement = { 0.0f, 0.0f }; }
 
     Vector2     getPosition()              const { return mPosition;              }
     Vector2     getMovement()              const { return mMovement;              }
@@ -128,6 +117,7 @@ public:
     void setAngle(float newAngle)
         { mAngle = newAngle;                       }
     void setLandable(bool landable) { mLandable = landable; }
+    void resetVelocity() { mVelocity = {0.0f, 0.0f}; }
 };
 
 #endif // ENTITY_H
