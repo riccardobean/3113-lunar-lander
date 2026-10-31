@@ -63,3 +63,5 @@ If the build succeeds, the application window should open and display the welcom
 * **Crash and Successful Landing Screens:** Generated using ChatGPT.
 
 All other assets and game implementation were created by myself.
+
+**Before downloading, using, or distributing this project, please read the [LICENSE](LICENSE) file.**
